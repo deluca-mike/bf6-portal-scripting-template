@@ -1,5 +1,5 @@
-import { UI } from 'bf6-portal-utils/ui';
-import { Logger } from 'bf6-portal-utils/logger';
+import { UI } from 'bf6-portal-utils/ui/index.ts';
+import { Logger } from 'bf6-portal-utils/logger/index.ts';
 
 export class DebugTool {
     public constructor(player: mod.Player) {

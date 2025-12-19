@@ -1,9 +1,9 @@
-import { UI } from 'bf6-portal-utils/ui';
-import { InteractMultiClickDetector } from 'bf6-portal-utils/interact-multi-click-detector';
-import { MapDetector } from 'bf6-portal-utils/map-detector';
+import { UI } from 'bf6-portal-utils/ui/index.ts';
+import { InteractMultiClickDetector } from 'bf6-portal-utils/interact-multi-click-detector/index.ts';
+import { MapDetector } from 'bf6-portal-utils/map-detector/index.ts';
 
-import { DebugTool } from './debug-tool';
-import { getPlayerStateVectorString, getVectorString } from './helpers';
+import { DebugTool } from './debug-tool/index.ts';
+import { getPlayerStateVectorString, getVectorString } from './helpers/index.ts';
 
 let adminDebugTool: DebugTool | undefined;
 
