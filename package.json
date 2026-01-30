@@ -1,23 +1,37 @@
 {
     "name": "bf6-portal-scripting-template",
-    "version": "1.1.0",
+    "experienceName": "Scripting Template",
+    "version": "1.4.0",
     "type": "module",
-    "description": "Scripting template for Battlefield 6 Portal",
+    "description": "Scripting template for Battlefield 6 Portal (use \"Use this template\" on GitHub to create a new project)",
     "engines": {
         "node": ">=23.0.0"
     },
     "scripts": {
+        "init": "node scripts/init.js",
+        "refresh-ai": "node scripts/generate-ai-context.js",
         "build": "bf6-portal-bundler --entrypoint ./src/index.ts --outDir ./dist",
-        "export-thumbnail": "node export-thumbnail.js",
-        "minify-spatials": "for file in ./spatials/*.json; do node spatial-minifier.js --out ./dist/\"$file\" --input \"$file\"; done",
+        "export-thumbnail": "node scripts/export-thumbnail.js",
+        "minify-spatials": "node scripts/minify-all-spatials.js",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
-        "prettier": "prettier --write ./src/**/*.ts ./src/*.ts ./*.js"
+        "prettier": "prettier --no-error-on-unmatched-pattern --write '**/*.{js,json,md,mjs,ts}'",
+        "deploy": "npm run build && node scripts/deploy.js --script dist/bundle.ts --strings dist/bundle.strings.json --versionBump patch",
+        "deploy:patch": "npm run deploy",
+        "deploy:minor": "npm run build && node scripts/deploy.js --script dist/bundle.ts --strings dist/bundle.strings.json --versionBump minor",
+        "deploy:major": "npm run build && node scripts/deploy.js --script dist/bundle.ts --strings dist/bundle.strings.json --versionBump major"
     },
     "repository": {
         "type": "git",
         "url": "git+https://github.com/deluca-mike/bf6-portal-scripting-template.git"
     },
+    "keywords": [
+        "template",
+        "portal",
+        "battlefield",
+        "battlefield-6",
+        "bf6"
+    ],
     "author": "Michael De Luca",
     "license": "MIT",
     "bugs": {
@@ -25,11 +39,14 @@
     },
     "homepage": "https://github.com/deluca-mike/bf6-portal-scripting-template#readme",
     "devDependencies": {
+        "@bf6mods/portal": "^1.1.0",
+        "@clack/prompts": "^1.0.0",
         "@typescript-eslint/eslint-plugin": "^8.50.0",
         "@typescript-eslint/parser": "^8.50.0",
-        "bf6-portal-bundler": "^1.1.0",
-        "bf6-portal-mod-types": "^1.1.3",
-        "bf6-portal-utils": "^2.0.1",
+        "bf6-portal-bundler": "^1.2.0",
+        "bf6-portal-mod-types": "^1.3.1",
+        "bf6-portal-utils": "^7.1.1",
+        "dotenv": "^17.2.3",
         "eslint": "^9.39.1",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-prettier": "^5.5.4",

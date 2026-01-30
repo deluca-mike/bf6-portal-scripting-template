@@ -43,6 +43,24 @@ export default [
         },
     },
     {
+        files: ['extension/**/*.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: {
+                console: 'readonly',
+                process: 'readonly',
+                chrome: 'readonly',
+                indexedDB: 'readonly',
+                location: 'readonly',
+                document: 'readonly',
+                URL: 'readonly',
+                navigator: 'readonly',
+                setTimeout: 'readonly',
+            },
+        },
+    },
+    {
         ignores: ['node_modules/**', 'src/modlib/**', 'dist/**'],
-    }
+    },
 ];

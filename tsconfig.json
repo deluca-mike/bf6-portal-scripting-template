@@ -20,10 +20,7 @@
         "target": "ES2022",
         "types": ["quickjs-types", "bf6-portal-mod-types"],
         "useDefineForClassFields": true,
-        "verbatimModuleSyntax": true,
+        "verbatimModuleSyntax": true
     },
-    "include": [
-        "src/**/*.ts",
-        ".yalc/**/*.ts"
-    ]
+    "include": ["src/**/*.ts", ".yalc/**/*.ts"]
 }

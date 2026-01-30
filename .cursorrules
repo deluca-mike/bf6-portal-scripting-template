@@ -1,0 +1,123 @@
+# Portal scripting template — Agent rules
+
+Project-specific rules for building Portal mods. These apply when editing code in this repo.
+
+---
+
+## Code quality & tooling
+
+- **Lint**: Run the linter. Code cannot be executed outside of a locked-down game server, so lint is a primary quality check.
+- **No any type**: Never use explicit or implicit any types unless absolutely necessary.
+
+---
+
+## Logging & debugging
+
+- **Prefer Logger over `console.log`**: Only local game servers on PC dump `console.log` logs to a file, but behavior differs from production and some user can only test on Xbox or PS5. Use the Logger module for consistent, environment-aware logging.
+- **Debugging is slow**: Seeing `setLogging` output requires building, uploading, and running the experience—not a quick loop. Don’t lean on runtime logging as the first path to learning about and fixing issues; prefer lint, types, and reasoning first.
+- **Logger performance**: For long messages or performance-critical paths (e.g. dynamic logger with many rows), use `logAsync()` instead of `log()` so the operation is non-blocking and doesn’t cause frame drops.
+- **Conditional logging**: When using the `Logging` class, use `willLog(level)` before building expensive log strings so you don’t build strings that won’t be emitted.
+- **Utility logging**: Many `bf6-portal-utils` modules expose `setLogging(logFn, logLevel, includeError?)`. Use it when you need runtime visibility into handler/callback errors; remember it requires a full build/upload/run cycle.
+
+---
+
+## The `mod` namespace
+
+- **Injected API**: `mod` is an injected namespace. Many functions use overloads rather than union/optional parameters.
+- **Type reference**: Use `@node_modules/bf6-portal-mod-types/index.d.ts` (and referenced files) to see what’s available. Avoid reading files under `./runtime-spawn-enums` except `./runtime-spawn-enums/common.d.ts`, which lists spawnable assets available on all maps.
+- **Opaque types**: Custom `mod` types (e.g. vectors, object refs) are opaque. Compare with `mod.Equals(a, b)`, `mod.GetObjId(a) == mod.GetObjId(b)`, or by decomposing (e.g. `mod.XComponentOf(vector)`).
+- **User-facing strings**: The first argument to `mod.Message` can be: (1) a string key from `mod.stringkeys` (from `string.json` at runtime), with or without `"{}"` placeholders—use `mod.Message(stringKey, ...substitutions)` when the string has placeholders; (2) a runtime `number`; or (3) a `mod.Player`. For string keys, mirror the JSON structure (e.g. `mod.stringkeys.template.notifications.deployedOnMap`). Use nested key paths (e.g. `gameMode.hud.section.label`) in `string.json` and `mod.stringkeys` for organization.
+
+---
+
+## Architecture & patterns
+
+- **Event-driven**: Prefer event-driven design over polling or long-lived task handlers.
+- **Exit-early**: Use early returns to reduce nesting and improve readability.
+- **Abstraction**: For complex logic or state, use namespaces or classes. Avoid relying on module or file scope for anything outside of the entry point file (`src/index.ts`), since the bundler flattens imports into a single TypeScript file (import order/hierarchy is preserved).
+- **Per-player state**: For game modes with per-player state, use a class (or namespace) with a registry keyed by player id (e.g. `{ [playerId: number]: GamePlayer }`). Register on join, remove and clean up (UI, timers, spawned objects) when the player is invalid or leaves.
+- **Constants in one place**: Keep game constants (points, thresholds, durations, sound config, message keys) as private static readonly or a dedicated config object; avoids magic numbers and makes tuning easier.
+- **Event cleanup**: When subscribing to events, store the unsubscribe callback returned by `.subscribe()` and call it when the context is done (e.g. after handling the relevant occurrence). If a subscription is meant to stay open for the entire game, it is fine to never store or use the unsubscribe callback.
+- **Optional chaining**: Use `?.` when accessing module-level or shared state that may not be initialized yet (e.g. admin-only tools that exist only after a specific player joins).
+- **No duplicate event handlers**: Do not implement or export any Battlefield Portal event handler functions (e.g. `OnPlayerDeployed`, `OnPlayerJoinGame`) in your codebase. The `Events` module from `bf6-portal-utils` owns all event hooking; subscribe via `Events.OnPlayerDeployed.subscribe(...)` etc. instead.
+- **Event handler order**: Execution order of multiple handlers for the same event is not guaranteed. If order matters, use a single handler that calls other functions in sequence, or chain manually.
+- **Event handler return values**: Handlers cannot return values to the caller. Use shared state or callbacks if you need to collect results.
+- **Race conditions**: When two handlers can run in any order (e.g. assist vs kill for the same victim), capture values that might change (e.g. “before death” state) as early as possible and write logic so both orderings are handled correctly.
+
+---
+
+## Dependencies & utilities
+
+- **Prefer `bf6-portal-utils`**: Use modules from `bf6-portal-utils` instead of the raw `mod` namespace when possible.
+- **Module docs**: For `bf6-portal-utils` usage, see `@.ai/bf6-portal-utils-knowledge.md` and search for the section `Module: <ModuleName>`.
+- **Utility event wiring**: Some `bf6-portal-utils` modules (e.g. MultiClickDetector) require specific event subscriptions at the entry point (e.g. `OngoingPlayer`, `OnPlayerLeaveGame`). Wire these in `src/index.ts` as shown in the template or in the module’s docs.
+- **Handle optional API results**: Utilities such as `MapDetector.currentMap()` can return `undefined`. Branch or guard on the result (e.g. use different `mod.Message` keys or behavior when the value is present vs absent).
+- **Async setup at game start**: When creating multiple spawners or other async resources at game start, use `.then()/.catch()` or async/await and handle errors (e.g. log and continue) so one failure doesn’t block the rest.
+- **MapDetector map enums**: For map checks use `MapDetector.Map` and `MapDetector.isCurrentMap()`; `MapDetector.currentNativeMap()` returns `undefined` for Area 22B and Redline Storage (missing from `mod.Maps`).
+- **Raycast wiring**: If using the Raycast module, forward `OnRayCastHit` and `OnRayCastMissed` to `Raycast.handleHit(player, point, normal)` and `Raycast.handleMiss(player)` so hits and misses are attributed to the correct ray. Optionally call `Raycast.pruneAllStates()` in `OnPlayerLeaveGame` for immediate cleanup.
+- **Sounds**: For infinite-duration sounds (`duration: 0`), keep a reference to the returned stop function and call it when the sound should end (e.g. when the player leaves the deploy screen); otherwise resources leak. Use `Sounds.preload(asset)` to reduce first-play latency when useful.
+- **SolidUI**: Sometimes non-reactive UI (plain `UI` module) is enough; in other cases reactive UI (SolidUI) is more performant and results in cleaner or less complex code—choose based on the case. When using SolidUI: pass property values as functions for accessors; properties matching `on[A-Z]` (e.g. `onClick`) are never made reactive; update stores with `setStore(producer)`, not direct assignment; dispose standalone effects or roots to avoid leaks.
+- **FFASpawning**: If using FFASpawning, it disables both team HQs and delegates UI input mode to the UI module; don’t mix with other systems that need HQs or that manage input mode without the UI module unless you know what you’re doing.
+- **PerformanceStats**: Don't use it at all.
+
+---
+
+## Player validity & cleanup
+
+- **Validate before use**: Check `mod.IsPlayerValid(player)` before relying on a player reference. We rely on it heavily because `OnPlayerLeaveGame` does not identify which player left—only that a player did—so you must check validity to know who to clean up. When invalid, clean up: delete UI (`element.delete()`), clear timers (`Timers.clearInterval`), unspawn owned objects (`mod.UnspawnObject`), remove from per-player registries.
+- **Delete-if-invalid pattern**: A method that checks validity, performs cleanup and removal from registries when invalid, and returns `true` if the player was invalid lets callers exit early (e.g. `if (bountyHunter._deleteIfNotValid()) return;`).
+
+---
+
+## Scoreboard & game flow
+
+- **Custom scoreboard**: Custom scoreboards are only required if the game mode strays from the defaults Portal ships with (which vary by mode). They can still be useful regardless, to decouple from what’s “available by default.” Use `mod.SetScoreboardType`, `mod.SetGameModeTargetScore`, `mod.SetScoreboardColumnWidths`, `mod.SetScoreboardColumnNames` (with `mod.Message` for names), and keep values in sync with `mod.SetScoreboardPlayerValues` and `mod.SetGameModeScore` when scores or stats change.
+- **End game**: Use `mod.EndGameMode(winnerPlayer)` or `mod.EndGameMode(team)` when the game ends (e.g. on time limit); use `mod.GetMatchTimeElapsed()` if you need to confirm match time before ending.
+- **Rewards**: Use `mod.AddEquipment(player, gadget)` to grant gadgets (e.g. call-in rewards); pair with `mod.DisplayHighlightedWorldLogMessage` to notify. Use `mod.Resupply(player, mod.ResupplyTypes.AmmoCrate)` for ammo refill (e.g. scavenger callback).
+
+---
+
+## Spawning & game objects
+
+- **Settings after spawn**: After spawning an object that needs settings applied, wait (e.g. 1 second, or longer for spawners if needed) using `Timers.setTimeout` or `await mod.Wait` before applying those settings.
+- **Spawn enums and types**: Use `mod.RuntimeSpawn_Common` for spawnable asset enums (see `runtime-spawn-enums/common.d.ts`). Cast the result of `mod.SpawnObject(...)` to the specific type (e.g. `as mod.VehicleSpawner`).
+- **Unspawn when done**: When a spawned object is no longer needed (e.g. a spawner whose spawned entity was destroyed), call `mod.UnspawnObject(...)` to free resources. Do not leave unused spawners or objects active.
+- **Reuse when updating often**: For objects that update frequently (e.g. world icon for a player’s position), create once and update with Set\* (e.g. `mod.SetWorldIconPosition`) instead of spawning and unspawning every time.
+
+---
+
+## Iterating mod collections
+
+- **Mod helpers only for mod collections**: Use `mod.CountOf(collection)` and `mod.ValueInArray(collection, i)` only when iterating over mod-type collections. Where possible, prefer native JavaScript types and primitives.
+- **Prefer JS arrays for frequently used lists**: For data you iterate over often (e.g. players), maintain a JavaScript array (e.g. `mod.Player[]`) and keep it updated in an event-based way (e.g. `OnPlayerJoinGame` / `OnPlayerLeaveGame`) instead of repeatedly calling `mod.AllPlayers()`. Mod functions’ resource cost is unknown, and mod types are opaque and not portable.
+
+---
+
+## MultiClickDetector & similar utilities
+
+- **Cleanup on leave**: Call `MultiClickDetector.pruneInvalidPlayers()` in `OnPlayerLeaveGame` so detector state and callback references are released; avoid holding detector instances unless you will call `destroy()` yourself.
+- **Interact keybind**: If using the default `IsInteracting` state for multi-click, players should have the Interact keybind set to Tap, not Hold.
+
+---
+
+## Timers & lifecycle
+
+- **mod.Wait only**: The only mod timing API is `await mod.Wait(seconds)`. Use it for simple inline delays (e.g. after spawn before applying settings) or fire-and-forget one-offs (e.g. `mod.Wait(2).then(() => element.hide())`). For recurring or cancelable timing, use `Timers` from `bf6-portal-utils/timers`.
+- **Clear on teardown**: Clear intervals (and timeouts you need to cancel before they run) when the context is torn down (e.g. in an `OnPlayerLeaveGame` handler) to avoid leaks and stray callbacks.
+- **Clear before replacing**: When restarting a periodic behavior with different parameters (e.g. new interval after a kill), clear the existing interval (`Timers.clearInterval`) before calling `Timers.setInterval` again so the old timer doesn’t keep running.
+- **Immediate first run**: `Timers.setInterval(callback, ms, true)` runs the callback immediately and then every `ms`; use for initialization that must run once and then periodically.
+- **Timer cleanup debugging**: `Timers.getActiveTimerCount()` is useful after teardown or debugging to confirm no timers were erroneously left active.
+
+---
+
+## UI
+
+- **Never create UI in raw code**: Always use the `UI` module from `bf6-portal-utils`; do not create UI elements directly via `mod`.
+- **Button events**: Register `UI.handleButtonEvent(player, widget, event)` in your `OnPlayerUIButtonEvent` handler (once per mod) so button clicks are dispatched; required for any UI that uses buttons.
+- **UI input mode**: If all UI is created and maintained with the `UI` module, there should be no reason to ever use `mod.EnableUIInputMode`—let the UI module handle it. Use `uiInputModeWhenVisible: true` on the element whose visibility you actually toggle that actually contains interactive elements (e.g. a container), not on every child button.
+- **Delete widgets**: When removing UI, call `element.delete()` so references are cleaned up and the element is removed from its parent; containers recursively delete children.
+- **Container child params**: When passing `childrenParams` to `UIContainer`, using type assertion `as UIContainer.ChildParams<UITextButton.Params>` (or the appropriate component type) can help surface issues with the params being correctly typed.
+- **Receiver**: Child elements inherit their parent’s receiver unless you set a different one in their params.
+- **Non-blocking UI updates**: When a single handler updates many UI elements (e.g. many rows or cells), yield first with `await Promise.resolve()` so the work runs in a microtask and doesn’t block the tick.
+- **AI vs human**: Branch on `mod.GetSoldierState(player, mod.SoldierStateBool.IsAISoldier)` to skip UI, sounds, or in-world messages for AI players when only humans should see or hear them.
+- **Ad-hoc feedback**: Prefer `mod.DisplayHighlightedWorldLogMessage(message, player)` for quick, in-world feedback to a player—it’s minimal, looks good, and is entirely managed by the engine. Use the `UI` module for more customizable or persistent feedback. Avoid `mod.DisplayNotificationMessage`; it’s ugly and jarring and should only be used for debugging.

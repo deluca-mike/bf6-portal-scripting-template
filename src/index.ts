@@ -1,432 +1,201 @@
+import { Events } from 'bf6-portal-utils/events/index.ts';
+import { Timers } from 'bf6-portal-utils/timers/index.ts';
 import { UI } from 'bf6-portal-utils/ui/index.ts';
-import { InteractMultiClickDetector } from 'bf6-portal-utils/interact-multi-click-detector/index.ts';
+import { MultiClickDetector } from 'bf6-portal-utils/multi-click-detector/index.ts';
 import { MapDetector } from 'bf6-portal-utils/map-detector/index.ts';
 
 import { DebugTool } from './debug-tool/index.ts';
 import { getPlayerStateVectorString, getVectorString } from './helpers/index.ts';
 
 let adminDebugTool: DebugTool | undefined;
+let telemetryInterval: number | undefined;
 
-// This will trigger every sever tick.
-export function OngoingGlobal(): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
+async function spawnVehicle(player: mod.Player, vehicleType: mod.VehicleList): Promise<void> {
+    const playerPosition = mod.GetSoldierState(player, mod.SoldierStateVector.GetPosition);
+    const playerFacingDirection = mod.GetSoldierState(player, mod.SoldierStateVector.GetFacingDirection);
+
+    // Create position 20 meters in front of player (facing direction).
+    const position = mod.CreateVector(
+        mod.XComponentOf(playerPosition) + mod.XComponentOf(playerFacingDirection) * 20,
+        mod.YComponentOf(playerPosition),
+        mod.ZComponentOf(playerPosition) + mod.ZComponentOf(playerFacingDirection) * 20
+    );
+
+    adminDebugTool?.dynamicLog(`Spawning vehicle spawner at ${getVectorString(position)}`);
+
+    const spawner = mod.SpawnObject(
+        mod.RuntimeSpawn_Common.VehicleSpawner,
+        position,
+        mod.CreateVector(0, 0, 0)
+    ) as mod.VehicleSpawner;
+
+    // Need to wait a bit before setting the vehicle spawner settings.
+    await mod.Wait(1);
+
+    adminDebugTool?.dynamicLog(`Setting vehicle spawner settings.`);
+
+    mod.SetVehicleSpawnerVehicleType(spawner, vehicleType);
+    mod.SetVehicleSpawnerAutoSpawn(spawner, true);
+    mod.SetVehicleSpawnerRespawnTime(spawner, 1);
+
+    adminDebugTool?.dynamicLog(`Spawning vehicle in 1 second.`);
+
+    // We do not want the vehicle spawner to spawn another vehicle after the first one has been destroyed, and if we
+    // simply set the auto spawn to false, the vehicle will still exist as an object, which is a waste of resourced.
+    // Instead, we subscribe to the OnVehicleSpawned event to know when a vehicle has spawned, determine if it is the
+    // vehicle we're looking for (based on its proximity to this spawner), and if it is, we disable automatic vehicle
+    // respawning from the vehicle spawner. Then, we subscribe to the OnVehicleDestroyed event to know when a vehicle]
+    // has been destroyed, and if it is the vehicle we're looking for (the one we just spawned), we can safely unspawn
+    // the spawner. This block shows the power of the `Events` module, and how it can be used to subscribe to and
+    // unsubscribe from events dynamically and in a specific context, to isolate and modularize code.
+    const unsubscribeFromOnVehicleSpawned = Events.OnVehicleSpawned.subscribe((vehicle) => {
+        const vehiclePosition = mod.GetVehicleState(vehicle, mod.VehicleStateVector.VehiclePosition);
+
+        // If the vehicle is not within 10 meters of the spawner, ignore it as it's not the vehicle we're looking for.
+        if (mod.DistanceBetween(vehiclePosition, position) > 10) return;
+
+        // Unsubscribe from the OnVehicleSpawned event as this context no longer needs to know when a vehicle has spawned.
+        unsubscribeFromOnVehicleSpawned();
+
+        adminDebugTool?.dynamicLog(`Vehicle spawned.`);
+
+        // Disable automatic vehicle respawning for the spawner as we're going to unspawn it once the vehicle's destroyed.
+        mod.SetVehicleSpawnerAutoSpawn(spawner, false);
+
+        const unsubscribeFromOnVehicleDestroyed = Events.OnVehicleDestroyed.subscribe((destroyedVehicle) => {
+            // If the destroyed vehicle is not the specific vehicle we're looking for, ignore it.
+            if (mod.GetObjId(destroyedVehicle) !== mod.GetObjId(vehicle)) return;
+
+            // Unsubscribe from the OnVehicleDestroyed event as this context no longer needs to know when the vehicle is destroyed.
+            unsubscribeFromOnVehicleDestroyed();
+
+            adminDebugTool?.dynamicLog(`Vehicle destroyed.`);
+
+            // Unspawn the vehicle spawner.
+            mod.UnspawnObject(spawner);
+
+            adminDebugTool?.dynamicLog(`Vehicle spawner unspawned.`);
+        });
+    });
 }
 
-// This will trigger every sever tick, for each AreaTrigger.
-export function OngoingAreaTrigger(eventAreaTrigger: mod.AreaTrigger): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each CapturePoint.
-export function OngoingCapturePoint(eventCapturePoint: mod.CapturePoint): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each EmplacementSpawner.
-export function OngoingEmplacementSpawner(eventEmplacementSpawner: mod.EmplacementSpawner): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each HQ.
-export function OngoingHQ(eventHQ: mod.HQ): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each InteractPoint.
-export function OngoingInteractPoint(eventInteractPoint: mod.InteractPoint): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each LootSpawner.
-export function OngoingLootSpawner(eventLootSpawner: mod.LootSpawner): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each MCOM.
-export function OngoingMCOM(eventMCOM: mod.MCOM): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each Player.
-export function OngoingPlayer(eventPlayer: mod.Player): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-
+function createAdminDebugTool(player: mod.Player): void {
     // The admin player is player id 0 for non-persistent test servers,
     // so don't do the rest of this unless it's the admin player.
-    if (mod.GetObjId(eventPlayer) != 0) return;
+    if (mod.GetObjId(player) != 0) return;
 
-    if (!InteractMultiClickDetector.checkMultiClick(eventPlayer)) return;
+    // Create a debug tool with a static logger visible by default.
+    const debugToolOptions: DebugTool.Options = {
+        staticLogger: {
+            visible: true,
+        },
+        dynamicLogger: {
+            visible: false,
+        },
+        debugMenu: {
+            visible: false,
+        },
+    };
 
-    adminDebugTool?.showDebugMenu();
-}
+    adminDebugTool = new DebugTool(player, debugToolOptions);
 
-// This will trigger every sever tick, for each RingOfFire.
-export function OngoingRingOfFire(eventRingOfFire: mod.RingOfFire): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
+    // Create a multi-click detector to open the debug menu when the player triple-clicks the interact key.
+    new MultiClickDetector(player, () => {
+        adminDebugTool?.showDebugMenu();
+    });
 
-// This will trigger every sever tick, for each Sector.
-export function OngoingSector(eventSector: mod.Sector): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each Spawner.
-export function OngoingSpawner(eventSpawner: mod.Spawner): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each SpawnPoint.
-export function OngoingSpawnPoint(eventSpawnPoint: mod.SpawnPoint): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each Team.
-export function OngoingTeam(eventTeam: mod.Team): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each Vehicle.
-export function OngoingVehicle(eventVehicle: mod.Vehicle): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each VehicleSpawner.
-export function OngoingVehicleSpawner(eventVehicleSpawner: mod.VehicleSpawner): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each WaypointPath.
-export function OngoingWaypointPath(eventWaypointPath: mod.WaypointPath): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger every sever tick, for each WorldIcon.
-export function OngoingWorldIcon(eventWorldIcon: mod.WorldIcon): void {
-    // Do something minimal every tick. Remember, this gets called 30 times per second.
-}
-
-// This will trigger when an AI Soldier stops trying to reach a destination.
-export function OnAIMoveToFailed(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`AI Soldier ${mod.GetObjId(eventPlayer)} failed to reach a destination.`);
-}
-
-// This will trigger when an AI Soldier starts moving to a target location.
-export function OnAIMoveToRunning(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`AI Soldier ${mod.GetObjId(eventPlayer)} started moving to a target location.`);
-}
-
-// This will trigger when an AI Soldier reaches target location.
-export function OnAIMoveToSucceeded(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`AI Soldier ${mod.GetObjId(eventPlayer)} reached a target location.`);
-}
-
-// This will trigger when an AI Soldier parachute action is running.
-export function OnAIParachuteRunning(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`AI Soldier ${mod.GetObjId(eventPlayer)} started parachuting.`);
-}
-
-// This will trigger when an AI Soldier parachute action has succeeded.
-export function OnAIParachuteSucceeded(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`AI Soldier ${mod.GetObjId(eventPlayer)} parachuted successfully.`);
-}
-
-// This will trigger when an AI Soldier stops following a waypoint.
-export function OnAIWaypointIdleFailed(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`AI Soldier ${mod.GetObjId(eventPlayer)} stopped following a waypoint.`);
-}
-
-// This will trigger when an AI Soldier starts following a waypoint.
-export function OnAIWaypointIdleRunning(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`AI Soldier ${mod.GetObjId(eventPlayer)} started following a waypoint.`);
-}
-
-// This will trigger when an AI Soldier finishes following a waypoint.
-export function OnAIWaypointIdleSucceeded(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`AI Soldier ${mod.GetObjId(eventPlayer)} finished following a waypoint.`);
-}
-
-// This will trigger when a team takes control of a CapturePoint.
-export function OnCapturePointCaptured(eventCapturePoint: mod.CapturePoint): void {
-    adminDebugTool?.dynamicLog(`Capture Point ${mod.GetObjId(eventCapturePoint)} was captured.`);
-}
-
-// This will trigger when a team begins capturing a CapturePoint.
-export function OnCapturePointCapturing(eventCapturePoint: mod.CapturePoint): void {
-    adminDebugTool?.dynamicLog(`Capture Point ${mod.GetObjId(eventCapturePoint)} is being captured.`);
-}
-
-// This will trigger when a team loses control of a CapturePoint.
-export function OnCapturePointLost(eventCapturePoint: mod.CapturePoint): void {
-    adminDebugTool?.dynamicLog(`Capture Point ${mod.GetObjId(eventCapturePoint)} was lost.`);
-}
-
-// This will trigger when the gamemode ends.
-export function OnGameModeEnding(): void {
-    adminDebugTool?.dynamicLog(`Game mode is ending.`);
-}
-
-// This will trigger at the start of the gamemode.
-export function OnGameModeStarted(): void {
-    adminDebugTool?.dynamicLog(`Game mode started.`);
-}
-
-// This will trigger when a Player is forced into the mandown state.
-export function OnMandown(eventPlayer: mod.Player, eventOtherPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} was downed by player ${mod.GetObjId(eventOtherPlayer)}.`
+    // Add a debug menu button to spawn an AH64 helicopter.
+    adminDebugTool?.addDebugMenuButton(
+        mod.Message(mod.stringkeys.template.debug.buttons.spawnHelicopter),
+        async () => await spawnVehicle(player, mod.VehicleList.AH64)
     );
+
+    // Add a debug menu button to spawn a golf cart.
+    adminDebugTool?.addDebugMenuButton(
+        mod.Message(mod.stringkeys.template.debug.buttons.spawnGolfCart),
+        async () => await spawnVehicle(player, mod.VehicleList.GolfCart)
+    );
+
+    // Log a message to the static logger.
+    adminDebugTool?.staticLog(`Triple-click interact key to open debug menu.`, 0);
 }
 
-// This will trigger when a MCOM is armed.
-export function OnMCOMArmed(eventMCOM: mod.MCOM): void {
-    adminDebugTool?.dynamicLog(`MCOM ${mod.GetObjId(eventMCOM)} was armed.`);
+function destroyAdminDebugTool(): void {
+    const players = mod.AllPlayers();
+    const count = mod.CountOf(players);
+
+    for (let i = 0; i < count; ++i) {
+        const player = mod.ValueInArray(players, i) as mod.Player;
+
+        // If the player is the admin player, then we know the admin is still in the game, so we can exit this function.
+        if (mod.GetObjId(player) === 0) return;
+    }
+
+    // Clear the telemetry interval so it doesn't continue to log the admin's position and facing direction, and
+    // destroy the debug tool.
+    Timers.clearInterval(telemetryInterval);
+    adminDebugTool?.destroy();
+    telemetryInterval = undefined;
+    adminDebugTool = undefined;
 }
 
-// This will trigger when a MCOM is defused.
-export function OnMCOMDefused(eventMCOM: mod.MCOM): void {
-    adminDebugTool?.dynamicLog(`MCOM ${mod.GetObjId(eventMCOM)} was defused.`);
+function showTelemetry(player: mod.Player): void {
+    // The admin player is player id 0 for non-persistent test servers,
+    // so don't do the rest of this unless it's the admin player.
+    if (mod.GetObjId(player) != 0) return;
+
+    // Log the admin's position and facing direction to the static logger, in rows 1 and 2, every second.
+    telemetryInterval = Timers.setInterval(() => {
+        adminDebugTool?.staticLog(
+            `Position: ${getPlayerStateVectorString(player, mod.SoldierStateVector.GetPosition)}`,
+            1
+        );
+
+        adminDebugTool?.staticLog(
+            `Facing: ${getPlayerStateVectorString(player, mod.SoldierStateVector.GetFacingDirection)}`,
+            2
+        );
+    }, 1000);
 }
 
-// This will trigger when a MCOM detonates.
-export function OnMCOMDestroyed(eventMCOM: mod.MCOM): void {
-    adminDebugTool?.dynamicLog(`MCOM ${mod.GetObjId(eventMCOM)} was destroyed.`);
+function stopTelemetry(player: mod.Player): void {
+    // The admin player is player id 0 for non-persistent test servers,
+    // so don't do the rest of this unless it's the admin player.
+    if (mod.GetObjId(player) != 0) return;
+
+    // Clear the telemetry interval so it doesn't continue to log the admin's position and facing direction.
+    Timers.clearInterval(telemetryInterval);
 }
 
-// This will trigger when a Player takes damage.
-export function OnPlayerDamaged(
-    eventPlayer: mod.Player, // The player who took damage.
-    eventOtherPlayer: mod.Player, // The player who dealt the damage.
-    eventDamageType: mod.DamageType, // The type of damage taken.
-    eventWeaponUnlock: mod.WeaponUnlock // The weapon that dealt the damage.
-): void {
-    // Not going to log anything here as this happens too often.
-}
+function handlePlayerDeployed(player: mod.Player): void {
+    // Log a message to the dynamic logger that the player has deployed.
+    adminDebugTool?.dynamicLog(`Player ${mod.GetObjId(player)} deployed.`);
 
-// This will trigger whenever a Player deploys.
-export function OnPlayerDeployed(eventPlayer: mod.Player): void {
+    // Get the current map (Can be undefined if the map cannot be determined).
     const map = MapDetector.currentMap();
 
     if (map) {
         mod.DisplayNotificationMessage(
-            mod.Message(
-                mod.stringkeys.template.notifications.deployedOnMap,
-                eventPlayer,
-                mod.stringkeys.template.maps[map]
-            ),
-            eventPlayer
+            mod.Message(mod.stringkeys.template.notifications.deployedOnMap, player, mod.stringkeys.template.maps[map]),
+            player
         );
     } else {
-        mod.DisplayNotificationMessage(
-            mod.Message(mod.stringkeys.template.notifications.deployed, eventPlayer),
-            eventPlayer
-        );
+        mod.DisplayNotificationMessage(mod.Message(mod.stringkeys.template.notifications.deployed, player), player);
     }
-
-    adminDebugTool?.dynamicLog(`Player ${mod.GetObjId(eventPlayer)} deployed.`);
-
-    // The admin player is player id 0 for non-persistent test servers,
-    // so don't do the rest of this unless it's the admin player.
-    if (mod.GetObjId(eventPlayer) != 0) return;
-
-    debugLoop(eventPlayer);
 }
 
-// This will trigger whenever a Player dies.
-export function OnPlayerDied(
-    eventPlayer: mod.Player, // The player who died.
-    eventOtherPlayer: mod.Player, // The player who killed the player who died.
-    eventDeathType: mod.DeathType, // The type of death.
-    eventWeaponUnlock: mod.WeaponUnlock // The weapon that killed the player who died.
-): void {
-    adminDebugTool?.dynamicLog(`Player ${mod.GetObjId(eventOtherPlayer)} killed player ${mod.GetObjId(eventPlayer)}.`);
-}
+// Event subscription needed for handling UI button events.
+Events.OnPlayerUIButtonEvent.subscribe((player, widget, event) => UI.handleButtonEvent(player, widget, event));
 
-// This will trigger when a Player earns a kill against another Player.
-export function OnPlayerEarnedKill(
-    eventPlayer: mod.Player, // The player who earned the kill.
-    eventOtherPlayer: mod.Player, // The player who was killed.
-    eventDeathType: mod.DeathType, // The type of death.
-    eventWeaponUnlock: mod.WeaponUnlock // The weapon that killed the player who died.
-): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} earned a kill on player ${mod.GetObjId(eventOtherPlayer)}.`
-    );
-}
+// Event subscriptions for the admin debug tool.
+Events.OnPlayerJoinGame.subscribe(createAdminDebugTool);
+Events.OnPlayerDeployed.subscribe(showTelemetry);
+Events.OnPlayerUndeploy.subscribe(stopTelemetry);
+Events.OnPlayerLeaveGame.subscribe((eventNumber) => destroyAdminDebugTool());
 
-// This will trigger when a Player earns a kill assist.
-export function OnPlayerEarnedKillAssist(eventPlayer: mod.Player, eventOtherPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} earned a kill assist on player ${mod.GetObjId(eventOtherPlayer)}.`
-    );
-}
+// Event subscriptions for notifying players of their name and the current map.
+Events.OnPlayerDeployed.subscribe(handlePlayerDeployed);
 
-// This will trigger when a Player enters an AreaTrigger.
-// Note that AreaTrigger has to be placed in Godot scene, assigned an ObjId and a CollisionPolygon3D(volume).
-export function OnPlayerEnterAreaTrigger(eventPlayer: mod.Player, eventAreaTrigger: mod.AreaTrigger): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} entered area trigger ${mod.GetObjId(eventAreaTrigger)}.`
-    );
-}
-
-// This will trigger when a Player enters a CapturePoint capturing area.
-// Note that CapturePoint has to be placed in Godot scene, assigned an ObjId and a CapturePointArea(volume).
-export function OnPlayerEnterCapturePoint(eventPlayer: mod.Player, eventCapturePoint: mod.CapturePoint): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} entered capture point ${mod.GetObjId(eventCapturePoint)}.`
-    );
-}
-
-// This will trigger when a Player enters a Vehicle seat.
-export function OnPlayerEnterVehicle(eventPlayer: mod.Player, eventVehicle: mod.Vehicle): void {
-    adminDebugTool?.dynamicLog(`Player ${mod.GetObjId(eventPlayer)} entered vehicle ${mod.GetObjId(eventVehicle)}.`);
-}
-
-// This will trigger when a Player enters a Vehicle seat.
-export function OnPlayerEnterVehicleSeat(
-    eventPlayer: mod.Player,
-    eventVehicle: mod.Vehicle,
-    eventSeat: mod.Object
-): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} entered vehicle seat ${mod.GetObjId(eventSeat)} of vehicle ${mod.GetObjId(eventVehicle)}.`
-    );
-}
-
-// This will trigger when a Player exits an AreaTrigger.
-// Note that AreaTrigger has to be placed in Godot scene, assigned an ObjId and a CollisionPolygon3D(volume).
-export function OnPlayerExitAreaTrigger(eventPlayer: mod.Player, eventAreaTrigger: mod.AreaTrigger): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} exited area trigger ${mod.GetObjId(eventAreaTrigger)}.`
-    );
-}
-
-// This will trigger when a Player exits a CapturePoint capturing area.
-// Note that CapturePoint has to be placed in Godot scene, assigned an ObjId and a CapturePointArea(volume).
-export function OnPlayerExitCapturePoint(eventPlayer: mod.Player, eventCapturePoint: mod.CapturePoint): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} exited capture point ${mod.GetObjId(eventCapturePoint)}.`
-    );
-}
-
-// This will trigger when a Player exits a Vehicle.
-export function OnPlayerExitVehicle(eventPlayer: mod.Player, eventVehicle: mod.Vehicle): void {
-    adminDebugTool?.dynamicLog(`Player ${mod.GetObjId(eventPlayer)} exited vehicle ${mod.GetObjId(eventVehicle)}.`);
-}
-
-// This will trigger when a Player exits a Vehicle seat.
-export function OnPlayerExitVehicleSeat(
-    eventPlayer: mod.Player,
-    eventVehicle: mod.Vehicle,
-    eventSeat: mod.Object
-): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} exited vehicle seat ${mod.GetObjId(eventSeat)} of vehicle ${mod.GetObjId(eventVehicle)}.`
-    );
-}
-
-// This will trigger when a Player interacts with InteractPoint.
-export function OnPlayerInteract(eventPlayer: mod.Player, eventInteractPoint: mod.InteractPoint): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} interacted with interact point ${mod.GetObjId(eventInteractPoint)}.`
-    );
-}
-
-// This will trigger when a Player joins the game.
-export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`Player ${mod.GetObjId(eventPlayer)} joined the game.`);
-
-    // The admin player is player id 0 for non-persistent test servers,
-    // so don't do the rest of this unless it's the admin player.
-    if (mod.GetObjId(eventPlayer) != 0) return;
-
-    adminDebugTool = new DebugTool(eventPlayer);
-}
-
-// This will trigger when any player leaves the game.
-export function OnPlayerLeaveGame(eventNumber: number): void {
-    adminDebugTool?.dynamicLog(`A player left the game (event number: ${eventNumber}).`);
-}
-
-// This will trigger when a Player changes team.
-export function OnPlayerSwitchTeam(eventPlayer: mod.Player, eventTeam: mod.Team): void {
-    adminDebugTool?.dynamicLog(`Player ${mod.GetObjId(eventPlayer)} switched to team ${mod.GetObjId(eventTeam)}.`);
-}
-
-// This will trigger when a Player interacts with an UI button.
-export function OnPlayerUIButtonEvent(
-    eventPlayer: mod.Player,
-    eventUIWidget: mod.UIWidget,
-    eventUIButtonEvent: mod.UIButtonEvent
-): void {
-    // The UI module has a static global click handler for all buttons created with the UI module.
-    UI.handleButtonClick(eventPlayer, eventUIWidget, eventUIButtonEvent);
-}
-
-// This will trigger when the Player dies and returns to the deploy screen.
-export function OnPlayerUndeploy(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`Player ${mod.GetObjId(eventPlayer)} undeployed.`);
-}
-
-// This will trigger when a Raycast hits a target.
-export function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} ray cast hit a target at ${getVectorString(eventPoint)} with normal ${getVectorString(eventNormal)}.`
-    );
-}
-
-// This will trigger when a Raycast is called and doesn't hit any target.
-export function OnRayCastMissed(eventPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(`Player ${mod.GetObjId(eventPlayer)} ray cast missed.`);
-}
-
-// This will trigger when a Player is revived by another Player.
-export function OnRevived(eventPlayer: mod.Player, eventOtherPlayer: mod.Player): void {
-    adminDebugTool?.dynamicLog(
-        `Player ${mod.GetObjId(eventPlayer)} was revived by player ${mod.GetObjId(eventOtherPlayer)}.`
-    );
-}
-
-// This will trigger when a RingOfFire changes size.
-export function OnRingOfFireZoneSizeChange(eventRingOfFire: mod.RingOfFire, eventNumber: number): void {
-    adminDebugTool?.dynamicLog(`RingOfFire ${mod.GetObjId(eventRingOfFire)} changed size to ${eventNumber}.`);
-}
-
-// This will trigger when an AISpawner spawns an AI Soldier.
-export function OnSpawnerSpawned(eventPlayer: mod.Player, eventSpawner: mod.Spawner): void {
-    adminDebugTool?.dynamicLog(
-        `AI player ${mod.GetObjId(eventPlayer)} spawned from spawner ${mod.GetObjId(eventSpawner)}.`
-    );
-}
-
-// This will trigger when the gamemode time limit has been reached.
-export function OnTimeLimitReached(): void {
-    adminDebugTool?.dynamicLog(`The time limit has been reached.`);
-}
-
-// This will trigger when a Vehicle is destroyed.
-export function OnVehicleDestroyed(eventVehicle: mod.Vehicle): void {
-    adminDebugTool?.dynamicLog(`Vehicle ${mod.GetObjId(eventVehicle)} was destroyed.`);
-}
-
-// This will trigger when a Vehicle is called into the map.
-export function OnVehicleSpawned(eventVehicle: mod.Vehicle): void {
-    adminDebugTool?.dynamicLog(`Vehicle ${mod.GetObjId(eventVehicle)} was spawned.`);
-}
-
-// This will call itself every 5 seconds.
-function debugLoop(player: mod.Player): void {
-    mod.Wait(0.5).then(() => {
-        if (!mod.GetSoldierState(player, mod.SoldierStateBool.IsAlive)) return;
-
-        adminDebugTool?.staticLog(
-            `Position: ${getPlayerStateVectorString(player, mod.SoldierStateVector.GetPosition)}`,
-            0
-        );
-        adminDebugTool?.staticLog(
-            `Facing: ${getPlayerStateVectorString(player, mod.SoldierStateVector.GetFacingDirection)}`,
-            1
-        );
-
-        debugLoop(player);
-    });
-}
+// Event subscriptions needed for multi-click detectors.
+Events.OngoingPlayer.subscribe(MultiClickDetector.handleOngoingPlayer);
+Events.OnPlayerLeaveGame.subscribe(MultiClickDetector.pruneInvalidPlayers);

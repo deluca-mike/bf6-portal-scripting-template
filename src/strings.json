@@ -1,5 +1,11 @@
 {
     "template": {
+        "debug": {
+            "buttons": {
+                "spawnHelicopter": "Spawn Helicopter",
+                "spawnGolfCart": "Spawn Golf Cart"
+            }
+        },
         "notifications": {
             "deployed": "You are {}",
             "deployedOnMap": "You are {} on {}"

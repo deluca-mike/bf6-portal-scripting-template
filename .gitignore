@@ -4,3 +4,5 @@ yalc.lock
 dist
 package-lock.json
 .DS_Store
+.env
+extension/build

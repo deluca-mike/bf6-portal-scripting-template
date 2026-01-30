@@ -1,0 +1,21 @@
+{
+    "name": "BF6 Portal Dev Sidekick",
+    "version": "1.1.0",
+    "description": "BF6 Portal developer sidekick extension.",
+    "manifest_version": 3,
+    "permissions": ["activeTab", "scripting", "cookies"],
+    "host_permissions": ["https://portal.battlefield.com/*"],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "32": "icons/icon32.png"
+        }
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "32": "icons/icon32.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    }
+}
