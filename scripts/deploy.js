@@ -124,7 +124,7 @@ const updatedPlayElement = {
     assetCategories: playElementDesign?.assetCategories,
     originalModRules: playElementDesign?.modRules?.compatibleRules?.original,
     playElementSettings: playElement?.playElementSettings,
-    publishState: playElement?.publishStateType,
+    publishState: 1,
     modLevelDataId: playElementDesign?.modLevelDataId,
     thumbnailUrl: playElement?.thumbnailUrl,
     attachments: newAttachments,

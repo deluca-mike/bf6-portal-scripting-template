@@ -355,20 +355,21 @@ function getOrCreateShortId(originalId) {
 }
 
 function reduceNumericPrecision(json, maxDigits) {
-    // Use regex to find all decimal numbers in the JSON
     return json.replace(/-?\d+\.\d+/g, (match) => {
-        // JSON numbers always use '.' as decimal separator. Try to parse and format.
-        const value = parseFloat(match);
+        const value = Number(match);
 
-        if (isNaN(value)) return match; // Return original if parsing fails
+        if (!Number.isFinite(value)) return match;
 
-        // Round to the specified number of decimal places.
-        const rounded = Math.round(value * Math.pow(10, maxDigits)) / Math.pow(10, maxDigits);
+        // Match: Math.Round(value, maxDigits)
+        const rounded = Number(value.toFixed(maxDigits));
 
-        // Format with significant digits.
-        let result = rounded.toPrecision(maxDigits);
+        // Match: ToString("G{maxDigits}", InvariantCulture)
+        const result = rounded.toString();
 
-        return result.includes('.') ? result.replace(/\.?0+$/, '') : result; // Remove trailing zeros after decimal point
+        if (!result.includes('.')) return result;
+
+        // Trim trailing zeros
+        return result.replace(/\.?0+$/, '');
     });
 }
 

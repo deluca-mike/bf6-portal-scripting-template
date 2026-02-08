@@ -21,6 +21,10 @@ export function convertArray<T>(array: mod.Array): T[] {
     return v;
 }
 
+export function getAllPlayers(): mod.Player[] {
+    return convertArray<mod.Player>(mod.AllPlayers());
+}
+
 export function equals(a: unknown, b: unknown): boolean {
     if (a === b || mod.Equals(a, b)) return true;
 

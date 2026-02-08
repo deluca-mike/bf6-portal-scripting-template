@@ -1,7 +1,7 @@
 {
     "name": "bf6-portal-scripting-template",
     "experienceName": "Scripting Template",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "type": "module",
     "description": "Scripting template for Battlefield 6 Portal (use \"Use this template\" on GitHub to create a new project)",
     "engines": {
