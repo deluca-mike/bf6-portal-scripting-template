@@ -1,7 +1,7 @@
 {
     "name": "bf6-portal-scripting-template",
     "experienceName": "Scripting Template",
-    "version": "1.4.1",
+    "version": "1.4.2",
     "type": "module",
     "description": "Scripting template for Battlefield 6 Portal (use \"Use this template\" on GitHub to create a new project)",
     "engines": {
@@ -9,6 +9,7 @@
     },
     "scripts": {
         "init": "node scripts/init.js",
+        "update": "node scripts/update.js",
         "refresh-ai": "node scripts/generate-ai-context.js",
         "build": "bf6-portal-bundler --entrypoint ./src/index.ts --outDir ./dist",
         "export-thumbnail": "node scripts/export-thumbnail.js",

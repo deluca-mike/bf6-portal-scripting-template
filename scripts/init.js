@@ -180,6 +180,7 @@ async function main() {
 
         pkg.name = projectName;
         pkg.experienceName = experienceName.trim();
+        pkg.templateVersion = pkg.version;
         pkg.version = (version && version.trim()) || '1.0.0';
         pkg.description = typeof description === 'string' && description.trim() ? description.trim() : '';
 

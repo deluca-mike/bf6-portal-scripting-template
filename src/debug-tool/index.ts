@@ -29,6 +29,85 @@ export class DebugTool {
             bgFill: mod.UIBgFill.Blur,
         });
 
+        const childrenParams: UIContainer.ChildParams<UITextButton.Params>[] = [
+            {
+                type: UITextButton,
+                y: 0,
+                width: 300,
+                height: 20,
+                anchor: mod.UIAnchor.TopCenter,
+                bgColor: UI.COLORS.GREY_25,
+                baseColor: UI.COLORS.BLACK,
+                message: mod.Message(mod.stringkeys.debugTool.buttons.toggleStaticLogger),
+                textSize: 20,
+                textColor: UI.COLORS.BF_GREEN_BRIGHT,
+                onClick: async (player: mod.Player): Promise<void> => {
+                    this._staticLogger.toggle();
+                },
+            },
+            {
+                type: UITextButton,
+                y: 20,
+                width: 300,
+                height: 20,
+                anchor: mod.UIAnchor.TopCenter,
+                bgColor: UI.COLORS.GREY_25,
+                baseColor: UI.COLORS.BLACK,
+                message: mod.Message(mod.stringkeys.debugTool.buttons.toggleDynamicLogger),
+                textSize: 20,
+                textColor: UI.COLORS.BF_GREEN_BRIGHT,
+                onClick: async (player: mod.Player): Promise<void> => {
+                    this._dynamicLogger.toggle();
+                },
+            },
+            {
+                type: UITextButton,
+                y: 40,
+                width: 300,
+                height: 20,
+                anchor: mod.UIAnchor.TopCenter,
+                bgColor: UI.COLORS.GREY_25,
+                baseColor: UI.COLORS.BLACK,
+                message: mod.Message(mod.stringkeys.debugTool.buttons.clearStaticLogger),
+                textSize: 20,
+                textColor: UI.COLORS.BF_GREEN_BRIGHT,
+                onClick: async (player: mod.Player): Promise<void> => {
+                    this._staticLogger.clear();
+                },
+            },
+            {
+                type: UITextButton,
+                y: 60,
+                width: 300,
+                height: 20,
+                anchor: mod.UIAnchor.TopCenter,
+                bgColor: UI.COLORS.GREY_25,
+                baseColor: UI.COLORS.BLACK,
+                message: mod.Message(mod.stringkeys.debugTool.buttons.clearDynamicLogger),
+                textSize: 20,
+                textColor: UI.COLORS.BF_GREEN_BRIGHT,
+                onClick: async (player: mod.Player): Promise<void> => {
+                    this._dynamicLogger.clear();
+                },
+            },
+            {
+                type: UITextButton,
+                y: 0,
+                width: 300,
+                height: 20,
+                anchor: mod.UIAnchor.BottomCenter,
+                bgColor: UI.COLORS.GREY_25,
+                baseColor: UI.COLORS.BLACK,
+                message: mod.Message(mod.stringkeys.debugTool.buttons.close),
+                textSize: 20,
+                textColor: UI.COLORS.BF_RED_BRIGHT,
+                onClick: async (player: mod.Player): Promise<void> => {
+                    mod.EnableUIInputMode(false, player);
+                    this._debugMenu.hide();
+                },
+            },
+        ];
+
         const debugConfig: UIContainer.Params = {
             receiver: player,
             width: options?.debugMenu?.width ?? 300,
@@ -39,84 +118,7 @@ export class DebugTool {
             bgAlpha: 0.8,
             visible: options?.debugMenu?.visible ?? false,
             uiInputModeWhenVisible: true,
-            childrenParams: [
-                {
-                    type: UITextButton,
-                    y: 0,
-                    width: 300,
-                    height: 20,
-                    anchor: mod.UIAnchor.TopCenter,
-                    bgColor: UI.COLORS.GREY_25,
-                    baseColor: UI.COLORS.BLACK,
-                    message: mod.Message(mod.stringkeys.debugTool.buttons.toggleStaticLogger),
-                    textSize: 20,
-                    textColor: UI.COLORS.BF_GREEN_BRIGHT,
-                    onClick: async (player: mod.Player): Promise<void> => {
-                        this._staticLogger.toggle();
-                    },
-                } as UIContainer.ChildParams<UITextButton.Params>,
-                {
-                    type: UITextButton,
-                    y: 20,
-                    width: 300,
-                    height: 20,
-                    anchor: mod.UIAnchor.TopCenter,
-                    bgColor: UI.COLORS.GREY_25,
-                    baseColor: UI.COLORS.BLACK,
-                    message: mod.Message(mod.stringkeys.debugTool.buttons.toggleDynamicLogger),
-                    textSize: 20,
-                    textColor: UI.COLORS.BF_GREEN_BRIGHT,
-                    onClick: async (player: mod.Player): Promise<void> => {
-                        this._dynamicLogger.toggle();
-                    },
-                } as UIContainer.ChildParams<UITextButton.Params>,
-                {
-                    type: UITextButton,
-                    y: 40,
-                    width: 300,
-                    height: 20,
-                    anchor: mod.UIAnchor.TopCenter,
-                    bgColor: UI.COLORS.GREY_25,
-                    baseColor: UI.COLORS.BLACK,
-                    message: mod.Message(mod.stringkeys.debugTool.buttons.clearStaticLogger),
-                    textSize: 20,
-                    textColor: UI.COLORS.BF_GREEN_BRIGHT,
-                    onClick: async (player: mod.Player): Promise<void> => {
-                        this._staticLogger.clear();
-                    },
-                } as UIContainer.ChildParams<UITextButton.Params>,
-                {
-                    type: UITextButton,
-                    y: 60,
-                    width: 300,
-                    height: 20,
-                    anchor: mod.UIAnchor.TopCenter,
-                    bgColor: UI.COLORS.GREY_25,
-                    baseColor: UI.COLORS.BLACK,
-                    message: mod.Message(mod.stringkeys.debugTool.buttons.clearDynamicLogger),
-                    textSize: 20,
-                    textColor: UI.COLORS.BF_GREEN_BRIGHT,
-                    onClick: async (player: mod.Player): Promise<void> => {
-                        this._dynamicLogger.clear();
-                    },
-                } as UIContainer.ChildParams<UITextButton.Params>,
-                {
-                    type: UITextButton,
-                    y: 0,
-                    width: 300,
-                    height: 20,
-                    anchor: mod.UIAnchor.BottomCenter,
-                    bgColor: UI.COLORS.GREY_25,
-                    baseColor: UI.COLORS.BLACK,
-                    message: mod.Message(mod.stringkeys.debugTool.buttons.close),
-                    textSize: 20,
-                    textColor: UI.COLORS.BF_RED_BRIGHT,
-                    onClick: async (player: mod.Player): Promise<void> => {
-                        mod.EnableUIInputMode(false, player);
-                        this._debugMenu.hide();
-                    },
-                } as UIContainer.ChildParams<UITextButton.Params>,
-            ],
+            childrenParams,
         };
 
         this._debugMenu = new UIContainer(debugConfig);
@@ -179,9 +181,15 @@ export class DebugTool {
     }
 
     public addDebugMenuButton(text: mod.Message, onClick: (player: mod.Player) => Promise<void>): void {
+        const requiredHeight = (this._debugMenu.children.length + 1) * 20; // If we include the new button.
+
+        if (requiredHeight > this._debugMenu.height) {
+            this._debugMenu.height = requiredHeight;
+        }
+
         new UITextButton({
             x: 0,
-            y: (this._debugMenu.children.length - 1) * 20,
+            y: (this._debugMenu.children.length - 1) * 20, // Place second to last.
             width: 300,
             height: 20,
             anchor: mod.UIAnchor.TopCenter,

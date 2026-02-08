@@ -14,6 +14,9 @@ begin coding your ideas.
 - ✅ **Init script** — Interactive setup for experience name, version, repository, and more; choose between a plain
   boilerplate or an example with telemetry and vehicle spawning; optionally move coding rules into the format your AI
   agent or IDE expects (VS Code, Cursor, Antigravity, Cline, Claude, Windsurf).
+- ✅ **Update script** — Run `npm run update` to bump npm dependencies to latest minor/patch (no major bumps) and sync
+  the `scripts/` directory from the template repo’s latest non-breaking version bump (so you get fixes to the deploy
+  script, init script, etc. without re-cloning or merging).
 - ✅ **bf6-portal-utils** — Bundled utilities (events, UI, timers, map detector, multi-click detector, etc.) plus
   **`.ai/bf6-portal-utils-knowledge.md`**, which consolidates the parts of each module’s README that are best suited for
   coding agents.
@@ -192,8 +195,9 @@ If you're using Portal's Spatial Editor to create custom maps or modify existing
 The init script (`npm run init`) is the recommended way to personalize the template after cloning. It:
 
 1. **Updates `package.json`** with your experience name, description, project name (npm package name), version, author,
-   and repository URL. Repository URL is used to set `repository`, `bugs`, and `homepage`; a leading `git+` is stripped
-   when generating `bugs.url` and `homepage`.
+   and repository URL. The script stores the template’s current version as `templateVersion` before overwriting
+   `version` with your choice (so `npm run update` can sync scripts from the same major). Repository URL is used to set
+   `repository`, `bugs`, and `homepage`; a leading `git+` is stripped when generating `bugs.url` and `homepage`.
 2. **Chooses the entry experience:**
     - **Plain boilerplate** — Deletes the current `src/index.ts` and renames `src/boilerplate.ts` to `src/index.ts`. You
       get a minimal entry point with the admin debug tool only.
@@ -209,6 +213,30 @@ The init script (`npm run init`) is the recommended way to personalize the templ
    ID) in GUID format, the script sets `MOD_ID` in `.env` to that value so the deploy script can use it.
 
 Run `npm run init` once after cloning; you can still edit `package.json`, `.env`, and source files by hand afterward.
+
+## Update Script
+
+The update script helps with pull in the latest non-breaking scripts from the
+[template repo](https://github.com/deluca-mike/bf6-portal-scripting-template)
+
+```bash
+npm run update
+```
+
+It does three things:
+
+1. **Updates npm dependencies** — Runs `npm-check-updates` with `--target minor` so all packages in `package.json` are
+   upgraded to the latest **minor and patch** versions only (no major version bumps that might introduce breaking
+   changes), then runs `npm install`.
+2. **Checks the template repo** — Uses `templateVersion` in `package.json` (set by the init script when it copies the
+   template version before you choose your own `version`) to determine the template major (e.g. `1`). It then finds the
+   **latest tag in that major** (e.g. latest `v1.x.x`) from the template repository.
+3. **Syncs `scripts/`** — Fetches the contents of the `scripts/` directory at that tag and overwrites your local
+   `scripts/` files. A new major release (e.g. `v2.0.0`) does not block updates: you keep getting the latest minor/patch
+   in your current major (e.g. `v1.4.0`) until you choose to move to the new major.
+
+You can run `npm run update` periodically to pick up dependency and script fixes. It requires network access to npm and
+GitHub.
 
 ## Coding Agent Support
 
@@ -289,6 +317,7 @@ bf6-portal-scripting-template/
 │       └── icons/
 ├── scripts/
 │   ├── init.js                  # Init script (npm run init)
+│   ├── update.js                # Update deps + sync scripts from template (npm run update)
 │   ├── deploy.js
 │   ├── export-thumbnail.js
 │   ├── generate-ai-context.js   # Regenerates .ai/bf6-portal-utils-knowledge.md
@@ -543,6 +572,9 @@ import { yourFunction } from './your-module';
 ```bash
 # One-time setup: set project info, experience type, and IDE rules file
 npm run init
+
+# Update deps (latest minor/patch) and sync scripts/ from template repo when safe
+npm run update
 
 # Build your experience (creates dist/bundle.ts and dist/bundle.strings.json)
 npm run build
