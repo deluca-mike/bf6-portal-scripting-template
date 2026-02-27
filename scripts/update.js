@@ -13,6 +13,7 @@ import https from 'node:https';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
+import * as p from '@clack/prompts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +36,13 @@ function semverCompare(a, b) {
     if (a[0] !== b[0]) return a[0] - b[0];
     if (a[1] !== b[1]) return a[1] - b[1];
     return a[2] - b[2];
+}
+
+function checkCancel(value) {
+    if (!p.isCancel(value)) return value;
+
+    p.cancel('Operation cancelled.');
+    process.exit(0);
 }
 
 function get(url, headers = {}) {
@@ -107,6 +115,92 @@ async function getScriptsContentsAtTag(tag) {
     return Array.isArray(contents) ? contents : [];
 }
 
+function getLatestVersionOfPackage(packageName) {
+    try {
+        return execSync(`npm view ${packageName} version`, {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        })
+            .trim()
+            .replace(/^v/, '');
+    } catch {
+        console.warn(`Could not query npm for latest ${packageName} version; returning null.`);
+        return null;
+    }
+}
+
+function getPackageVersionRange(pkg, packageName) {
+    return (
+        (pkg.devDependencies && pkg.devDependencies[packageName]) || (pkg.dependencies && pkg.dependencies[packageName])
+    );
+}
+
+function upgradePackageVersionRange(packageName, newVersion) {
+    console.log(`\nUpgrading ${packageName} to ^${newVersion} in package.json (may be breaking)...`);
+
+    const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf8'));
+
+    if (pkg.devDependencies && pkg.devDependencies[packageName]) {
+        pkg.devDependencies[packageName] = `^${newVersion}`;
+    } else if (pkg.dependencies && pkg.dependencies[packageName]) {
+        pkg.dependencies[packageName] = `^${newVersion}`;
+    }
+
+    fs.writeFileSync(PACKAGE_JSON, JSON.stringify(pkg, null, 4) + '\n', 'utf8');
+
+    console.log(`${packageName} version range updated.\n`);
+}
+
+async function promptForUtilsUpgrade(pkg) {
+    // Check for newer major version of bf6-portal-utils before proceeding
+    const currentUtilsRange = getPackageVersionRange(pkg, 'bf6-portal-utils');
+
+    if (!currentUtilsRange) return false;
+
+    const currentUtilsSemver = parseSemver(String(currentUtilsRange).replace(/^[^\d]*/, ''));
+
+    if (!currentUtilsSemver) return false;
+
+    const latestUtilsVersion = getLatestVersionOfPackage('bf6-portal-utils');
+    const latestUtilsSemver = latestUtilsVersion ? parseSemver(latestUtilsVersion) : null;
+
+    if (!latestUtilsSemver || latestUtilsSemver[0] <= currentUtilsSemver[0]) return false;
+
+    const shouldUpgrade = checkCancel(
+        await p.confirm({
+            message:
+                `A newer major version of bf6-portal-utils is available ` +
+                `(${currentUtilsRange} → ^${latestUtilsVersion}). ` +
+                'This may include breaking changes. Upgrade before continuing?',
+            initialValue: false,
+        })
+    );
+
+    if (!shouldUpgrade) return false;
+
+    upgradePackageVersionRange('bf6-portal-utils', latestUtilsVersion);
+
+    return true;
+}
+
+function tryModTypesUpgrade(pkg) {
+    const currentModTypesRange = getPackageVersionRange(pkg, 'bf6-portal-mod-types');
+
+    if (!currentModTypesRange) return false;
+
+    const currentModTypesSemver = parseSemver(String(currentModTypesRange).replace(/^[^\d]*/, ''));
+
+    const latestModTypesVersion = getLatestVersionOfPackage('bf6-portal-mod-types');
+    const latestModTypesSemver = latestModTypesVersion ? parseSemver(latestModTypesVersion) : null;
+
+    if (!latestModTypesSemver || semverCompare(latestModTypesSemver, currentModTypesSemver) <= 0) return false;
+
+    upgradePackageVersionRange('bf6-portal-mod-types', latestModTypesVersion);
+
+    return true;
+}
+
 async function main() {
     console.log('BF6 Portal template update\n');
 
@@ -126,7 +220,14 @@ async function main() {
         );
     }
 
-    console.log('1. Updating npm dependencies (latest minor/patch, no major bumps)...');
+    console.log('\n1. Checking for bf6-portal-utils and bf6-portal-mod-types upgrades...');
+
+    const utilsUpgraded = await promptForUtilsUpgrade(pkg);
+
+    // Always upgrade bf6-portal-mod-types to the latest version (may be breaking)
+    tryModTypesUpgrade(pkg);
+
+    console.log('\n2. Updating npm dependencies (latest minor/patch, no major bumps)...');
 
     try {
         execSync('npx npm-check-updates -u --target minor', {
@@ -139,7 +240,7 @@ async function main() {
         return;
     }
 
-    console.log('\n2. Running npm install...');
+    console.log('\n3. Running npm install...');
     // Use --legacy-peer-deps so peer dependency conflicts (e.g. typescript-eslint) don't fail the update
     execSync('npm install --legacy-peer-deps', { cwd: ROOT, stdio: 'inherit' });
 
@@ -150,7 +251,7 @@ async function main() {
 
     const currentMajor = currentTemplate[0];
 
-    console.log('\n3. Checking template repo for script updates (same major: v' + currentMajor + '.x.x)...');
+    console.log('\n4. Checking template repo for script updates (same major: v' + currentMajor + '.x.x)...');
 
     let latestTag;
     try {
@@ -194,12 +295,27 @@ async function main() {
     }
 
     const tagVersion = latestTag.replace(/^v/, '');
+
+    console.log(`\n5. Updating templateVersion in package.json to ${tagVersion}.`);
+
     const pkgUpdated = JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf8'));
     pkgUpdated.templateVersion = tagVersion;
 
     fs.writeFileSync(PACKAGE_JSON, JSON.stringify(pkgUpdated, null, 4) + '\n', 'utf8');
 
-    console.log(`\nUpdated templateVersion in package.json to ${tagVersion}.`);
+    if (utilsUpgraded) {
+        console.log('\n6. Refreshing AI context for new bf6-portal-utils...');
+
+        try {
+            execSync('npm run refresh-ai', {
+                cwd: ROOT,
+                stdio: 'inherit',
+            });
+        } catch {
+            console.error('Failed to refresh AI context for bf6-portal-utils.');
+        }
+    }
+
     console.log('Done.');
 }
 

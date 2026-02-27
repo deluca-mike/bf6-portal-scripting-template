@@ -40,7 +40,7 @@ Project-specific rules for building Portal mods. These apply when editing code i
 - **Event cleanup**: When subscribing to events, store the unsubscribe callback returned by `.subscribe()` and call it when the context is done (e.g. after handling the relevant occurrence). If a subscription is meant to stay open for the entire game, it is fine to never store or use the unsubscribe callback.
 - **Optional chaining**: Use `?.` when accessing module-level or shared state that may not be initialized yet (e.g. admin-only tools that exist only after a specific player joins).
 - **No duplicate event handlers**: Do not implement or export any Battlefield Portal event handler functions (e.g. `OnPlayerDeployed`, `OnPlayerJoinGame`) in your codebase. The `Events` module from `bf6-portal-utils` owns all event hooking; subscribe via `Events.OnPlayerDeployed.subscribe(...)` etc. instead.
-- **Event handler order**: Execution order of multiple handlers for the same event is not guaranteed. If order matters, use a single handler that calls other functions in sequence, or chain manually.
+- **Event handler order**: Execution order of multiple handlers for the same event is not guaranteed. If order matters, use a single handler that calls other functions in sequence, or chain manually. For example, `OnPlayerJoinGame` may fire before `OnGameModeStarted`.
 - **Event handler return values**: Handlers cannot return values to the caller. Use shared state or callbacks if you need to collect results.
 - **Race conditions**: When two handlers can run in any order (e.g. assist vs kill for the same victim), capture values that might change (e.g. “before death” state) as early as possible and write logic so both orderings are handled correctly.
 
