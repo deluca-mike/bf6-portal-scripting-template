@@ -7,6 +7,14 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const BLACKLIST = ['911', '69', '420', '88', '666'];
+
+/** True if the version string (with dots removed) contains any blacklisted substring. */
+const isVersionBlacklisted = (version) => {
+    const withoutDots = version.replace(/\./g, '');
+    return BLACKLIST.some((s) => withoutDots.includes(s));
+};
+
 const fileContentsToBase64 = (filePath, isJson = false) => {
     const contents = fs.readFileSync(filePath, 'utf8');
     return new TextEncoder().encode(isJson ? JSON.stringify(JSON.parse(contents)) : contents);
@@ -71,11 +79,29 @@ const parseArgs = () => {
 
 const bumpVersion = (version, versionBump) => {
     const parts = version.split('.').map((s) => parseInt(s, 10) || 0);
-    const [major = 0, minor = 0, patch = 0] = parts;
-    if (versionBump === 'patch') return `${major}.${minor}.${patch + 1}`;
-    if (versionBump === 'minor') return `${major}.${minor + 1}.0`;
-    if (versionBump === 'major') return `${major + 1}.0.0`;
-    return version;
+
+    let [major = 0, minor = 0, patch = 0] = parts;
+    let candidate;
+
+    do {
+        if (versionBump === 'patch') {
+            patch += 1;
+            candidate = `${major}.${minor}.${patch}`;
+        } else if (versionBump === 'minor') {
+            minor += 1;
+            patch = 0;
+            candidate = `${major}.${minor}.${patch}`;
+        } else if (versionBump === 'major') {
+            major += 1;
+            minor = 0;
+            patch = 0;
+            candidate = `${major}.${minor}.${patch}`;
+        } else {
+            return version;
+        }
+    } while (isVersionBlacklisted(candidate));
+
+    return candidate;
 };
 
 const packageJsonPath = path.join(process.cwd(), 'package.json');
