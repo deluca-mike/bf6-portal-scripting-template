@@ -105,15 +105,13 @@ function createAdminDebugTool(player: mod.Player): void {
     });
 
     // Add a debug menu button to spawn an AH64 helicopter.
-    adminDebugTool?.addDebugMenuButton(
-        mod.Message(mod.stringkeys.template.debug.buttons.spawnHelicopter),
-        async () => await spawnVehicle(player, mod.VehicleList.AH64)
+    adminDebugTool?.addDebugMenuButton(mod.Message(mod.stringkeys.template.debug.buttons.spawnHelicopter), () =>
+        spawnVehicle(player, mod.VehicleList.AH64)
     );
 
     // Add a debug menu button to spawn a golf cart.
-    adminDebugTool?.addDebugMenuButton(
-        mod.Message(mod.stringkeys.template.debug.buttons.spawnGolfCart),
-        async () => await spawnVehicle(player, mod.VehicleList.GolfCart)
+    adminDebugTool?.addDebugMenuButton(mod.Message(mod.stringkeys.template.debug.buttons.spawnGolfCart), () =>
+        spawnVehicle(player, mod.VehicleList.GolfCart)
     );
 
     // Log a message to the static logger.

@@ -190,6 +190,11 @@ If you're using Portal's Spatial Editor to create custom maps or modify existing
 4. Upload the minified files from `./dist/spatials/` to Portal. The minification process typically reduces file sizes by
    50-80%, making it easier to meet file size limits.
 
+    **Web minifier (GitHub Pages):** A UI version of the minifier is available at
+    <https://deluca-mike.github.io/bf6-portal-scripting-template/>. The repo includes a small site in `pages/` that lets
+    users upload a spatial JSON file, minify it in the browser, and download the result. To publish it: enable GitHub
+    Pages for this repo (Settings → Pages → Source: Deploy from a branch → Branch: main, folder: /pages).
+
 ## Init Script (Detailed)
 
 The init script (`npm run init`) is the recommended way to personalize the template after cloning. It:

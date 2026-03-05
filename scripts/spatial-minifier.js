@@ -1,68 +1,13 @@
 // Originally written by dfanz0r at https://github.com/dfanz0r/PortalSpatialMinifier/tree/main
 // Translated to JavaScript by Michael De Luca
+// Version 1.2
+// CLI wrapper around spatial-minifier-core.js
 
 import fs from 'fs';
 import path from 'path';
+import { minifySpatialJson } from './spatial-minifier-core.js';
 
-// Name/ID mapping dictionary
-const nameMap = new Map();
-let counter = 1;
-
-// Names that should never be replaced (important structural/asset names).
-const excludedNames = new Set(['Static']);
-
-// Check if a name/ID should be excluded from replacement.
-function isExcluded(nameOrId) {
-    // Exclude if undefined or empty.
-    if (!nameOrId || nameOrId === '') return true;
-
-    // Exclude anything in the Static/ tree (IDs starting with "Static/").
-    if (nameOrId.startsWith('Static/')) return true;
-
-    // Exclude exact matches from the exclusion list.
-    if (excludedNames.has(nameOrId)) return true;
-
-    return false;
-}
-
-// Properties that contain single ID references to other objects.
-const SINGLE_REFERENCE_PROPERTIES = new Set([
-    'HQArea',
-    'CombatVolume',
-    'CaptureArea',
-    'Area',
-    'SurroundingCombatArea',
-    'ExclusionAreaTeam1',
-    'ExclusionAreaTeam2',
-    'ExclusionAreaTeam1_OBB',
-    'ExclusionAreaTeam2_OBB',
-    'DestructionArea',
-    'MapDetailRenderArea',
-    'SectorArea',
-    'RetreatArea',
-    'RetreatFromArea',
-    'AdvanceFromArea',
-    'AdvanceToArea',
-]);
-
-// Properties that contain arrays of ID references to other objects.
-const ARRAY_ID_REFERENCE_PROPERTIES = new Set([
-    'InfantrySpawns',
-    'ForwardSpawns',
-    'InfantrySpawnPoints_Team1',
-    'InfantrySpawnPoints_Team2',
-    'SpawnPoints',
-    'CapturePoints',
-    'MCOMs',
-    'AlternateSpawns',
-]);
-
-// Settings for different optimization features.
-let enableNameIdReplacement = true;
-let enablePrecisionReduction = true;
 let showNameMappings = false;
-let useFormattedOutput = false;
-let precisionDigits = 6;
 
 function parseArguments(args, options) {
     for (let i = 0; i < args.length; ++i) {
@@ -76,12 +21,12 @@ function parseArguments(args, options) {
                 break;
 
             case '--no-rename':
-                enableNameIdReplacement = false;
+                options.enableNameIdReplacement = false;
                 console.log('Name and ID replacement disabled');
                 break;
 
             case '--no-precision':
-                enablePrecisionReduction = false;
+                options.enablePrecisionReduction = false;
                 console.log('Precision reduction disabled');
                 break;
 
@@ -91,7 +36,7 @@ function parseArguments(args, options) {
 
             case '--formatted':
             case '--pretty':
-                useFormattedOutput = true;
+                options.useFormattedOutput = true;
                 console.log('Formatted output enabled (with whitespace and indentation)');
                 break;
 
@@ -99,9 +44,9 @@ function parseArguments(args, options) {
                 if (i + 1 < args.length) {
                     const digits = parseInt(args[i + 1], 10);
                     if (!isNaN(digits) && digits > 0 && digits <= 15) {
-                        precisionDigits = digits;
-                        i++; // Skip the next argument as we've consumed it
-                        console.log(`Precision set to ${precisionDigits} digits`);
+                        options.precisionDigits = digits;
+                        i++;
+                        console.log(`Precision set to ${options.precisionDigits} digits`);
                     } else {
                         console.log('Invalid precision value. Using default (6).');
                     }
@@ -112,7 +57,7 @@ function parseArguments(args, options) {
             case '--input':
                 if (i + 1 < args.length) {
                     options.inputFile = args[i + 1];
-                    i++; // Skip the next argument as we've consumed it
+                    i++;
                 } else {
                     console.log('Missing input file argument.');
                     process.exit(1);
@@ -122,7 +67,7 @@ function parseArguments(args, options) {
             case '--out':
                 if (i + 1 < args.length) {
                     options.outputFile = args[i + 1];
-                    i++; // Skip the next argument as we've consumed it
+                    i++;
                 } else {
                     console.log('Missing output file argument.');
                     process.exit(1);
@@ -177,208 +122,16 @@ function showHelp() {
     console.log('  node json-minifier.js --show-mappings --precision 7 -i input.json --out output.json');
 }
 
-// Pass 1: Collect all names and IDs to build the complete mapping
-function collectNamesAndIds(node) {
-    if (node === null || node === undefined) return;
-
-    if (Array.isArray(node)) {
-        for (let i = 0; i < node.length; ++i) {
-            collectNamesAndIds(node[i]);
-        }
-
-        return;
-    }
-
-    if (typeof node !== 'object') return;
-
-    for (const [key, value] of Object.entries(node)) {
-        if (typeof value === 'string' && enableNameIdReplacement) {
-            if (key === 'name') {
-                // Collect names from "name" property values
-                getOrCreateShortName(value);
-            } else if (key === 'id') {
-                // Collect IDs from "id" property values
-                getOrCreateShortId(value);
-            }
-        }
-
-        // Recursively collect from nested structures
-        collectNamesAndIds(value);
-    }
-}
-
-// Pass 2: Replace all references using the complete mapping
-function replaceReferencesRecursively(node) {
-    if (node === null || node === undefined) return;
-
-    if (Array.isArray(node)) {
-        for (let i = 0; i < node.length; ++i) {
-            replaceReferencesRecursively(node[i]);
-        }
-
-        return;
-    }
-
-    if (typeof node !== 'object') return;
-
-    for (const [key, value] of Object.entries(node)) {
-        // Replace names in "name" property values
-        if (key === 'name' && typeof value === 'string' && enableNameIdReplacement) {
-            // Check if this object has a Static/ ID - if so, don't rename its name
-            let isStaticObject = false;
-
-            if (node.id && typeof node.id === 'string') {
-                isStaticObject = node.id.startsWith('Static/');
-            }
-
-            if (!isStaticObject && nameMap.has(value)) {
-                node[key] = nameMap.get(value);
-            }
-
-            continue;
-        }
-
-        // Replace IDs in "id" property values
-        if (key === 'id' && typeof value === 'string' && enableNameIdReplacement) {
-            if (nameMap.has(value)) {
-                node[key] = nameMap.get(value);
-            }
-
-            continue;
-        }
-
-        // Handle single ID reference properties
-        if (SINGLE_REFERENCE_PROPERTIES.has(key) && typeof value === 'string') {
-            if (nameMap.has(value)) {
-                node[key] = nameMap.get(value);
-            }
-
-            continue;
-        }
-
-        // Handle array ID reference properties
-        if (ARRAY_ID_REFERENCE_PROPERTIES.has(key) && Array.isArray(value)) {
-            for (let i = 0; i < value.length; ++i) {
-                if (typeof value[i] === 'string' && nameMap.has(value[i])) {
-                    value[i] = nameMap.get(value[i]);
-                }
-            }
-
-            continue;
-        }
-        // Handle regular arrays (that might contain objects)
-
-        if (Array.isArray(value) && !ARRAY_ID_REFERENCE_PROPERTIES.has(key)) {
-            for (let i = 0; i < value.length; ++i) {
-                replaceReferencesRecursively(value[i]);
-            }
-
-            continue;
-        }
-
-        // Recursively process nested objects
-        replaceReferencesRecursively(value);
-    }
-}
-
-function getOrCreateShortName(originalName) {
-    if (isExcluded(originalName)) return originalName; // Don't replace names that are in the exclusion list
-
-    if (nameMap.has(originalName)) return nameMap.get(originalName);
-
-    const shortName = generateShortName(counter++);
-
-    nameMap.set(originalName, shortName);
-
-    return shortName;
-}
-
-function generateShortName(number) {
-    // Generate short names like: a, b, c, ..., z, aa, ab, ac, etc.
-    let result = '';
-    let num = number;
-
-    while (num > 0) {
-        num--; // Make it 0-based
-        result = String.fromCharCode('a'.charCodeAt(0) + (num % 26)) + result;
-        num = Math.floor(num / 26);
-    }
-
-    return result;
-}
-
-function getOrCreateShortId(originalId) {
-    if (!originalId || originalId === '') return originalId;
-
-    // Don't replace IDs that are in the exclusion list
-    if (isExcluded(originalId)) return originalId;
-
-    // Check if we already have a mapping for this ID
-    if (nameMap.has(originalId)) return nameMap.get(originalId);
-
-    // For hierarchical IDs (like "TEAM_1_HQ/SpawnPoint_1_1"), try to build from existing mappings
-    if (originalId.includes('/')) {
-        const parts = originalId.split('/');
-        const newParts = new Array(parts.length);
-
-        for (let i = 0; i < parts.length; ++i) {
-            // Check if this part is excluded
-            if (isExcluded(parts[i])) {
-                newParts[i] = parts[i]; // Keep the original
-                continue;
-            }
-
-            // If this part already has a mapping, use it
-            if (nameMap.has(parts[i])) {
-                newParts[i] = nameMap.get(parts[i]);
-                continue;
-            }
-
-            // Create a new short name for this part
-            newParts[i] = getOrCreateShortName(parts[i]);
-        }
-
-        const newId = newParts.join('/');
-
-        nameMap.set(originalId, newId);
-
-        return newId;
-    }
-
-    // For simple IDs, check if it matches a name we already have a mapping for
-    if (nameMap.has(originalId)) return nameMap.get(originalId);
-
-    // Otherwise, create a new short identifier for this ID
-    const shortId = getOrCreateShortName(originalId);
-
-    return shortId;
-}
-
-function reduceNumericPrecision(json, maxDigits) {
-    return json.replace(/-?\d+\.\d+/g, (match) => {
-        const value = Number(match);
-
-        if (!Number.isFinite(value)) return match;
-
-        // Match: Math.Round(value, maxDigits)
-        const rounded = Number(value.toFixed(maxDigits));
-
-        // Match: ToString("G{maxDigits}", InvariantCulture)
-        const result = rounded.toString();
-
-        if (!result.includes('.')) return result;
-
-        // Trim trailing zeros
-        return result.replace(/\.?0+$/, '');
-    });
-}
-
 function main() {
     const args = process.argv.slice(2);
 
     const options = {
         inputFile: null,
         outputFile: null,
+        enableNameIdReplacement: true,
+        enablePrecisionReduction: true,
+        precisionDigits: 6,
+        useFormattedOutput: false,
     };
 
     // Parse command line arguments
@@ -403,46 +156,25 @@ function main() {
         // Read the JSON file
         const jsonContent = fs.readFileSync(options.inputFile, 'utf8');
 
-        // Parse as JSON for dynamic manipulation
-        const rootNode = JSON.parse(jsonContent);
+        const minifierOptions = {
+            enableNameIdReplacement: options.enableNameIdReplacement,
+            enablePrecisionReduction: options.enablePrecisionReduction,
+            precisionDigits: options.precisionDigits,
+            useFormattedOutput: options.useFormattedOutput,
+            returnMappings: options.enableNameIdReplacement,
+        };
 
-        if (rootNode === null || rootNode === undefined) throw new Error('Failed to parse JSON content');
-
-        // Replace names and IDs recursively (if enabled)
-        if (enableNameIdReplacement) {
-            console.log('Replacing names and IDs with short identifiers...');
-
-            // Two-pass approach:
-            // Pass 1: Collect all names and IDs to build the complete mapping
-            collectNamesAndIds(rootNode);
-
-            // Pass 2: Replace all references using the complete mapping
-            replaceReferencesRecursively(rootNode);
-        }
-
-        // Serialize with configurable formatting
-        let minifiedJson;
-        if (useFormattedOutput) {
-            // Serialize with formatted output (4-space indentation)
-            minifiedJson = JSON.stringify(rootNode, null, 4);
-        } else {
-            minifiedJson = JSON.stringify(rootNode);
-        }
-
-        // Reduce numeric precision in the final JSON string (if enabled)
-        let finalJson = minifiedJson;
-        if (enablePrecisionReduction) {
-            console.log(`Reducing numeric precision to ${precisionDigits} digits...`);
-            finalJson = reduceNumericPrecision(minifiedJson, precisionDigits);
-        }
+        const result = minifySpatialJson(jsonContent, minifierOptions);
+        const minifiedJson = typeof result === 'string' ? result : result.minified;
+        const nameMap = typeof result === 'object' ? result.nameMap : null;
 
         // Write the minified JSON
         fs.mkdirSync(path.dirname(options.outputFile), { recursive: true });
-        fs.writeFileSync(options.outputFile, finalJson, 'utf8');
+        fs.writeFileSync(options.outputFile, minifiedJson, 'utf8');
 
         console.log(`Minified JSON saved to: ${options.outputFile}`);
 
-        if (enableNameIdReplacement) {
+        if (options.enableNameIdReplacement && nameMap) {
             console.log(`Replaced ${nameMap.size} unique names and IDs`);
         }
 
@@ -456,7 +188,7 @@ function main() {
         console.log(`Size reduction: ${reductionPercent.toFixed(1)}%`);
 
         // Optionally print the name/ID mappings
-        if (showNameMappings && enableNameIdReplacement && nameMap.size > 0) {
+        if (showNameMappings && nameMap && nameMap.size > 0) {
             console.log(`\nName/ID mappings:`);
             for (const [key, value] of nameMap.entries()) {
                 console.log(`  ${key} -> ${value}`);

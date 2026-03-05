@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>BF6 Spatial JSON Minifier v1.2</title>
+        <style>
+            :root {
+                --bg: #0f0f12;
+                --surface: #18181c;
+                --border: #2a2a30;
+                --text: #e4e4e7;
+                --muted: #71717a;
+                --accent: #3b82f6;
+                --accent-hover: #2563eb;
+                --error: #ef4444;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+                background: var(--bg);
+                color: var(--text);
+                margin: 0;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 1.5rem;
+            }
+            main {
+                width: 100%;
+                max-width: 28rem;
+            }
+            h1 {
+                font-size: 1.25rem;
+                font-weight: 600;
+                margin: 0 0 0.5rem;
+                letter-spacing: -0.02em;
+            }
+            p {
+                color: var(--muted);
+                font-size: 0.875rem;
+                margin: 0 0 1rem;
+                line-height: 1.5;
+            }
+            .drop-zone {
+                border: 2px dashed var(--border);
+                border-radius: 8px;
+                padding: 2rem;
+                text-align: center;
+                background: var(--surface);
+                cursor: pointer;
+                transition:
+                    border-color 0.15s,
+                    background 0.15s;
+                display: block;
+            }
+            .drop-zone:hover,
+            .drop-zone.dragover {
+                border-color: var(--accent);
+                background: rgba(59, 130, 246, 0.06);
+            }
+            .drop-zone input[type='file'] {
+                position: absolute;
+                width: 0.1px;
+                height: 0.1px;
+                opacity: 0;
+                overflow: hidden;
+                z-index: -1;
+            }
+            .drop-zone .label {
+                display: block;
+                font-size: 0.875rem;
+                color: var(--muted);
+            }
+            .drop-zone .label strong {
+                color: var(--text);
+            }
+            .file-name {
+                margin-top: 0.5rem;
+                font-size: 0.8125rem;
+                color: var(--accent);
+                word-break: break-all;
+            }
+            .options {
+                margin-top: 1.5rem;
+                padding: 1rem 1.25rem;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+            }
+            .options h2 {
+                font-size: 0.8125rem;
+                font-weight: 600;
+                margin: 0 0 0.75rem;
+                color: var(--text);
+            }
+            .option-row {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                margin-bottom: 0.5rem;
+                font-size: 0.8125rem;
+            }
+            .option-row:last-child {
+                margin-bottom: 0;
+            }
+            .option-row input[type='checkbox'] {
+                accent-color: var(--accent);
+                cursor: pointer;
+            }
+            .option-row input[type='number'] {
+                width: 3.5rem;
+                padding: 0.25rem 0.5rem;
+                font: inherit;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                color: var(--text);
+            }
+            .option-row label {
+                cursor: pointer;
+                user-select: none;
+            }
+            .btn {
+                display: inline-block;
+                margin-top: 1rem;
+                padding: 0.5rem 1rem;
+                font: inherit;
+                font-size: 0.875rem;
+                color: #fff;
+                background: var(--accent);
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+            }
+            .btn:hover {
+                background: var(--accent-hover);
+            }
+            .btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            .results {
+                margin-top: 1.5rem;
+                padding: 1rem 1.25rem;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                display: none;
+            }
+            .results.visible {
+                display: block;
+            }
+            .results h2 {
+                font-size: 0.8125rem;
+                font-weight: 600;
+                margin: 0 0 0.75rem;
+                color: var(--text);
+            }
+            .download-row {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                margin-bottom: 0.5rem;
+                font-size: 0.8125rem;
+            }
+            .download-row:last-child {
+                margin-bottom: 0;
+            }
+            .download-row .btn {
+                margin-top: 0;
+            }
+            .error {
+                margin-top: 1rem;
+                padding: 0.75rem 1rem;
+                background: rgba(239, 68, 68, 0.12);
+                border: 1px solid rgba(239, 68, 68, 0.3);
+                border-radius: 6px;
+                color: var(--error);
+                font-size: 0.8125rem;
+                display: none;
+            }
+            .error.visible {
+                display: block;
+            }
+            a {
+                color: var(--accent);
+                text-decoration: none;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+            footer {
+                margin-top: 2rem;
+                font-size: 0.75rem;
+                color: var(--muted);
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <h1>BF6 Spatial JSON Minifier v1.2</h1>
+            <p>
+                Upload a spatial map JSON file, set options, then click Minimize. Download the minified JSON and
+                optionally the name map.
+            </p>
+            <label class="drop-zone" id="dropZone" for="fileInput">
+                <input type="file" id="fileInput" accept=".json" />
+                <span class="label"><strong>Choose a file</strong> or drag and drop</span>
+                <span class="file-name" id="fileName" aria-live="polite"></span>
+            </label>
+            <div class="options">
+                <h2>Options</h2>
+                <div class="option-row">
+                    <input type="checkbox" id="optNameId" checked />
+                    <label for="optNameId">Replace names/IDs with short identifiers</label>
+                </div>
+                <div class="option-row">
+                    <input type="checkbox" id="optPrecision" checked />
+                    <label for="optPrecision">Reduce numeric precision</label>
+                </div>
+                <div class="option-row">
+                    <label for="optPrecisionDigits">Precision digits (1–15):</label>
+                    <input type="number" id="optPrecisionDigits" min="1" max="15" value="6" />
+                </div>
+                <div class="option-row">
+                    <input type="checkbox" id="optFormatted" />
+                    <label for="optFormatted">Pretty-print output (formatted)</label>
+                </div>
+                <div class="option-row">
+                    <input type="checkbox" id="optReturnMappings" />
+                    <label for="optReturnMappings">Return name map (enables name-map download)</label>
+                </div>
+                <button type="button" class="btn" id="minimizeBtn" disabled>Minimize</button>
+            </div>
+            <div class="results" id="results">
+                <h2>Download</h2>
+                <div id="downloadLinks"></div>
+            </div>
+            <div class="error" id="error" aria-live="polite"></div>
+        </main>
+        <footer>
+            Part of
+            <a href="https://github.com/deluca-mike/bf6-portal-scripting-template">bf6-portal-scripting-template</a>
+        </footer>
+        <script type="module">
+            import { minifySpatialJson } from './js/spatial-minifier-core.js';
+
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+            const fileNameEl = document.getElementById('fileName');
+            const minimizeBtn = document.getElementById('minimizeBtn');
+            const resultsEl = document.getElementById('results');
+            const downloadLinksEl = document.getElementById('downloadLinks');
+            const errorEl = document.getElementById('error');
+
+            const optNameId = document.getElementById('optNameId');
+            const optPrecision = document.getElementById('optPrecision');
+            const optPrecisionDigits = document.getElementById('optPrecisionDigits');
+            const optFormatted = document.getElementById('optFormatted');
+            const optReturnMappings = document.getElementById('optReturnMappings');
+
+            let currentFile = null;
+
+            function showError(message) {
+                errorEl.textContent = message;
+                errorEl.classList.add('visible');
+            }
+
+            function clearError() {
+                errorEl.textContent = '';
+                errorEl.classList.remove('visible');
+            }
+
+            function setFile(file) {
+                currentFile = file;
+                if (file) {
+                    fileNameEl.textContent = file.name;
+                    minimizeBtn.disabled = false;
+                } else {
+                    fileNameEl.textContent = '';
+                    minimizeBtn.disabled = true;
+                }
+                resultsEl.classList.remove('visible');
+                clearError();
+            }
+
+            function downloadBlob(blob, filename) {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            }
+
+            function runMinimize() {
+                clearError();
+                resultsEl.classList.remove('visible');
+                if (!currentFile || !currentFile.name.toLowerCase().endsWith('.json')) {
+                    showError('Please choose a JSON file.');
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const text = reader.result;
+                        if (typeof text !== 'string') {
+                            showError('Could not read file as text.');
+                            return;
+                        }
+                        const digits = Math.max(1, Math.min(15, parseInt(optPrecisionDigits.value, 10) || 6));
+                        const result = minifySpatialJson(text, {
+                            enableNameIdReplacement: optNameId.checked,
+                            enablePrecisionReduction: optPrecision.checked,
+                            precisionDigits: digits,
+                            useFormattedOutput: optFormatted.checked,
+                            returnMappings: optReturnMappings.checked && optNameId.checked,
+                        });
+                        const base = currentFile.name.replace(/\.json$/i, '');
+                        const minifiedJson = typeof result === 'string' ? result : result.minified;
+                        const nameMap = typeof result === 'object' ? result.nameMap : null;
+
+                        downloadLinksEl.innerHTML = '';
+
+                        const minifiedRow = document.createElement('div');
+                        minifiedRow.className = 'download-row';
+                        const minBtn = document.createElement('button');
+                        minBtn.type = 'button';
+                        minBtn.className = 'btn';
+                        minBtn.textContent = 'Download minified JSON';
+                        minBtn.addEventListener('click', () => {
+                            const blob = new Blob([minifiedJson], { type: 'application/json' });
+                            downloadBlob(blob, base + '.minified.json');
+                        });
+                        minifiedRow.appendChild(minBtn);
+                        downloadLinksEl.appendChild(minifiedRow);
+
+                        if (nameMap && nameMap.size > 0) {
+                            const mapRow = document.createElement('div');
+                            mapRow.className = 'download-row';
+                            const mapBtn = document.createElement('button');
+                            mapBtn.type = 'button';
+                            mapBtn.className = 'btn';
+                            mapBtn.textContent = 'Download name map';
+                            mapBtn.addEventListener('click', () => {
+                                const obj = Object.fromEntries(nameMap.entries());
+                                const json = JSON.stringify(obj, null, optFormatted.checked ? 4 : 0);
+                                const blob = new Blob([json], { type: 'application/json' });
+                                downloadBlob(blob, base + '.name-map.json');
+                            });
+                            mapRow.appendChild(mapBtn);
+                            downloadLinksEl.appendChild(mapRow);
+                        }
+
+                        resultsEl.classList.add('visible');
+                    } catch (err) {
+                        showError(err.message || 'Minification failed.');
+                    }
+                };
+                reader.onerror = () => showError('Could not read file.');
+                reader.readAsText(currentFile, 'utf8');
+            }
+
+            fileInput.addEventListener('change', () => {
+                const file = fileInput.files?.[0];
+                setFile(file || null);
+            });
+
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                const file = e.dataTransfer?.files?.[0];
+                if (file) setFile(file);
+            });
+
+            minimizeBtn.addEventListener('click', runMinimize);
+        </script>
+    </body>
+</html>

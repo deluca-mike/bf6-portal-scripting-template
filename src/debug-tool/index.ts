@@ -180,7 +180,7 @@ export class DebugTool {
         this._debugMenu.delete();
     }
 
-    public addDebugMenuButton(text: mod.Message, onClick: (player: mod.Player) => Promise<void>): void {
+    public addDebugMenuButton(text: mod.Message, onClick: (player: mod.Player) => Promise<void> | void): void {
         const requiredHeight = (this._debugMenu.children.length + 1) * 20; // If we include the new button.
 
         if (requiredHeight > this._debugMenu.height) {
