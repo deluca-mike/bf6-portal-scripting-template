@@ -1,0 +1,45 @@
+# Copy spatial-minifier-core.js into pages/js and deploy the minifier site to GitHub Pages.
+# Runs on every push to main. Configure the repo to use "GitHub Actions" as the Pages source.
+
+name: Deploy Pages
+
+on:
+    push:
+        branches: [main]
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+concurrency:
+    group: 'pages'
+    cancel-in-progress: false
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Copy spatial-minifier-core to pages/js
+              run: |
+                  mkdir -p pages/js
+                  cp scripts/spatial-minifier-core.js pages/js/spatial-minifier-core.js
+
+            - name: Upload GitHub Pages artifact
+              uses: actions/upload-pages-artifact@v3
+              with:
+                  path: pages
+
+    deploy:
+        needs: build
+        runs-on: ubuntu-latest
+        environment:
+            name: github-pages
+            url: ${{ steps.deploy.outputs.page_url }}
+        steps:
+            - name: Deploy to GitHub Pages
+              id: deploy
+              uses: actions/deploy-pages@v4

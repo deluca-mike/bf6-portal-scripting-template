@@ -1,6 +1,6 @@
 /**
- * Cross-platform script to run spatial-minifier.js on every JSON file in ./spatials.
- * Outputs to ./dist/spatials/ with the same filenames.
+ * Cross-platform script to run spatial-minifier.js on every JSON file in spatials/ (project root).
+ * Outputs to dist/spatials/ with the same filenames.
  */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
@@ -8,9 +8,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.join(__dirname, '..');
 
-const spatialsDir = path.join(__dirname, 'spatials');
-const distSpatialsDir = path.join(__dirname, 'dist', 'spatials');
+const spatialsDir = path.join(projectRoot, 'spatials');
+const distSpatialsDir = path.join(projectRoot, 'dist', 'spatials');
 
 fs.mkdirSync(distSpatialsDir, { recursive: true });
 
