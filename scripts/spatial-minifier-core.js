@@ -25,7 +25,10 @@ function isExcluded(nameOrId) {
 const SINGLE_REFERENCE_PROPERTIES = new Set([
     'HQArea',
     'CombatVolume',
+    'ExclusionVolume',
+    'SurroundingVolume',
     'CaptureArea',
+    'AdditionalCaptureArea',
     'Area',
     'SurroundingCombatArea',
     'ExclusionAreaTeam1',
@@ -39,6 +42,8 @@ const SINGLE_REFERENCE_PROPERTIES = new Set([
     'RetreatFromArea',
     'AdvanceFromArea',
     'AdvanceToArea',
+    'HardRestrictOBB',
+    'RestrictShapeData',
 ]);
 
 // Properties that contain arrays of ID references to other objects.
