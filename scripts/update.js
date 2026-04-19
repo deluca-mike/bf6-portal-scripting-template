@@ -1,7 +1,7 @@
 /**
  * Update script: bump npm deps to latest non-major, run npm install, and optionally
- * sync the local scripts/ directory from the template repo's latest tag that matches
- * the current template major version (from package.json "templateVersion").
+ * sync the local scripts/ directory and tsconfig.json from the template repo's latest tag
+ * that matches the current template major version (from package.json "templateVersion").
  *
  * Usage: node scripts/update.js
  * Run via: npm run update
@@ -20,6 +20,7 @@ const __dirname = path.dirname(__filename);
 
 const ROOT = path.resolve(__dirname, '..');
 const PACKAGE_JSON = path.join(ROOT, 'package.json');
+const TSCONFIG_JSON = path.join(ROOT, 'tsconfig.json');
 const SCRIPTS_DIR = path.join(ROOT, 'scripts');
 const TEMPLATE_REPO = 'deluca-mike/bf6-portal-scripting-template';
 const GITHUB_API = 'https://api.github.com';
@@ -113,6 +114,11 @@ async function getScriptsContentsAtTag(tag) {
     );
 
     return Array.isArray(contents) ? contents : [];
+}
+
+async function getTsConfigAtTag(tag) {
+    const rawUrl = `${GITHUB_RAW}/${TEMPLATE_REPO}/${tag}/tsconfig.json`;
+    return fetchText(rawUrl);
 }
 
 function getLatestVersionOfPackage(packageName) {
@@ -265,6 +271,16 @@ async function main() {
     if (!latestTag) {
         console.log(`No tags found for major v${currentMajor}.x.x in template repo. Done.`);
         return;
+    }
+
+    console.log(`Fetching tsconfig.json from template at ${latestTag}...`);
+
+    try {
+        const tsConfigContent = await getTsConfigAtTag(latestTag);
+        fs.writeFileSync(TSCONFIG_JSON, tsConfigContent, 'utf8');
+        console.log('  Updated tsconfig.json');
+    } catch (err) {
+        console.warn(`  Skipped tsconfig.json: ${err.message}`);
     }
 
     console.log(`Fetching scripts/ from template at ${latestTag}...`);
